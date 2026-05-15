@@ -156,7 +156,7 @@ async function loop(now) {
 
     // 2.5 Temporal Smoothing / Auto-append logic (Debounce)
     // Ensures a gesture is held steadily for 2 seconds before confirming it as a valid input.
-    if (top.probability > 0.85) {
+    if (top.probability > 0.80) {
       if (top.className !== stableChar) {
         stableChar = top.className;
         stableStartTime = Date.now();
@@ -283,3 +283,19 @@ btnStop?.addEventListener('click', handleStop);
 setStatus('idle', 'Ready');
 showOverlay('Press "Start Camera" to begin.', false);
 btnStart.disabled = false;
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    // Stop predictions when the user switches tabs
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  } else {
+    // Resume predictions when the user returns
+    if (CameraModule.isRunning() && !rafId) {
+      lastPredictAt = performance.now();
+      rafId = requestAnimationFrame(loop);
+    }
+  }
+});
