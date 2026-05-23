@@ -75,37 +75,7 @@ const AngleDetectorModule = (() => {
     return calculateAngleFromVertical(indexMCP, indexTIP);
   }
 
-  /**
-   * Menghitung sudut antara ibu jari dan jari telunjuk.
-   * Digunakan untuk memvalidasi huruf L (harus membentuk sudut ~90°).
-   * 
-   * @param {Array} landmarks - 21 MediaPipe landmarks
-   * @returns {number} Sudut dalam derajat
-   */
-  function getThumbIndexAngle(landmarks) {
-    const wrist    = landmarks[0];
-    const thumbTip = landmarks[4];
-    const indexTip = landmarks[8];
-    
-    // Vektor dari wrist ke thumb
-    const v1x = thumbTip.x - wrist.x;
-    const v1y = thumbTip.y - wrist.y;
-    
-    // Vektor dari wrist ke index
-    const v2x = indexTip.x - wrist.x;
-    const v2y = indexTip.y - wrist.y;
-    
-    // Dot product dan magnitude
-    const dot = v1x * v2x + v1y * v2y;
-    const mag1 = Math.sqrt(v1x * v1x + v1y * v1y);
-    const mag2 = Math.sqrt(v2x * v2x + v2y * v2y);
-    
-    // Sudut dalam radian, lalu konversi ke derajat
-    const angleRad = Math.acos(dot / (mag1 * mag2));
-    const angleDeg = angleRad * (180 / Math.PI);
-    
-    return angleDeg;
-  }
+
 
   /* ══════════════════════════════════════════════════════════
    * POST-PROCESSING LOGIC
@@ -134,10 +104,9 @@ const AngleDetectorModule = (() => {
 
     const pinkyAngle = getPinkyAngle(landmarks);
     const indexAngle = getIndexFingerAngle(landmarks);
-    const thumbIndexAngle = getThumbIndexAngle(landmarks);
 
     // Debug log (bisa diaktifkan untuk tuning)
-    // console.log(`[AngleDetector] ${predictedClass} | Pinky: ${pinkyAngle.toFixed(1)}° | Index: ${indexAngle.toFixed(1)}° | Thumb-Index: ${thumbIndexAngle.toFixed(1)}°`);
+    // console.log(`[AngleDetector] ${predictedClass} | Pinky: ${pinkyAngle.toFixed(1)}° | Index: ${indexAngle.toFixed(1)}°`);
 
     /* ── Aturan 1: I → J (kemiringan pinky) ──────────────── */
     if (predictedClass === 'I' && pinkyAngle >= 50) {
@@ -164,33 +133,15 @@ const AngleDetectorModule = (() => {
     return predictedClass;
   }
 
-  /**
-   * Mendapatkan informasi debug sudut untuk ditampilkan di UI.
-   * 
-   * @param {Array} landmarks - 21 MediaPipe landmarks
-   * @returns {Object} { pinkyAngle, indexAngle, thumbIndexAngle }
-   */
-  function getDebugAngles(landmarks) {
-    if (!landmarks || landmarks.length < 21) {
-      return { pinkyAngle: 0, indexAngle: 0, thumbIndexAngle: 0 };
-    }
 
-    return {
-      pinkyAngle: getPinkyAngle(landmarks),
-      indexAngle: getIndexFingerAngle(landmarks),
-      thumbIndexAngle: getThumbIndexAngle(landmarks)
-    };
-  }
 
   /* ══════════════════════════════════════════════════════════
    * PUBLIC API
    * ══════════════════════════════════════════════════════════ */
   return {
     correctPrediction,
-    getDebugAngles,
     getPinkyAngle,
-    getIndexFingerAngle,
-    getThumbIndexAngle
+    getIndexFingerAngle
   };
 
 })();
