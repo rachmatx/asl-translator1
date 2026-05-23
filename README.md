@@ -5,6 +5,7 @@ The **ASL Translator** is a fully browser-based, real-time American Sign Languag
 
 ## ✨ Key Features
 - **Real-time ASL Alphabet Detection:** Instantaneous gesture recognition for all 26 letters of the English alphabet, plus control commands (`space`, `del`, `nothing`).
+- **🆕 Angle-Based Letter Correction:** Advanced post-processing that distinguishes visually similar letters (I/J, D/Z) by analyzing finger angles, without requiring model retraining.
 - **Temporal Smoothing (Debouncing):** Incorporates a strict voting buffer and a 2-second stability threshold to eliminate flickering and ensure deliberate text input (Auto-typing).
 - **Left-hand Mirroring Support:** Automatically detects physical left hands and mirrors the coordinate space on the X-axis, enabling seamless recognition regardless of which hand the user signs with.
 - **Native Text-to-Speech (TTS):** Converts constructed sentences to audible speech using the browser's native SpeechSynthesis API.
@@ -27,9 +28,10 @@ The following diagram illustrates the frame-by-frame data processing pipeline, f
 flowchart TD
     A[Webcam Feed] --> B[MediaPipe Preprocessing]
     B -->|Extracts 21 3D Landmarks| C{TensorFlow.js Model}
-    C -->|Class Probabilities| D[Voting / Temporal Smoothing Buffer]
-    D -->|Debounced Winner| E[UI Update & Text Output]
-    E --> F[Native TTS Audio]
+    C -->|Class Probabilities| D[🆕 Angle-Based Correction]
+    D -->|I→J, D→Z, L Guards| E[Voting / Temporal Smoothing Buffer]
+    E -->|Debounced Winner| F[UI Update & Text Output]
+    F --> G[Native TTS Audio]
 ```
 
 ### User Interaction Use Case
@@ -42,6 +44,48 @@ flowchart LR
     User --> UC3([Trigger TTS / Speak])
     User --> UC4([Clear Text / Backspace])
 ```
+
+---
+
+## 🔍 Angle-Based Letter Correction
+
+### Problem Statement
+Beberapa huruf ASL memiliki bentuk tangan yang sangat mirip dan hanya berbeda pada **kemiringan jari tertentu**:
+- **I vs J**: Bentuk identik, hanya beda kemiringan jari kelingking
+- **D vs Z**: Bentuk sangat mirip, hanya beda kemiringan jari telunjuk
+- **L confusion**: Huruf T dan Z sering salah terbaca sebagai L
+
+### Solution
+Sistem ini menggunakan **post-processing berbasis geometri** untuk menganalisis sudut kemiringan jari dari MediaPipe landmarks dan mengoreksi prediksi model tanpa perlu retrain.
+
+### Correction Rules
+
+| Rule | Condition | Action |
+|------|-----------|--------|
+| **I → J** | Model prediksi `I` + pinky angle ≥ 50° | Ubah ke `J` |
+| **D → Z** | Model prediksi `D` + index angle ≥ 50° | Ubah ke `Z` |
+| **L → Z** | Model prediksi `L` + index angle ≥ 45° | Ubah ke `Z` |
+
+**Catatan:** Aturan L → T telah dihapus karena menyebabkan false positive. Model sudah cukup baik membedakan L dan T tanpa koreksi sudut.
+
+### How It Works
+```javascript
+// Setelah model prediksi
+const correctedClass = AngleDetectorModule.correctPrediction(
+    predictedClass,
+    landmarks,
+    confidence
+);
+```
+
+### Tuning Parameters
+Jika akurasi kurang optimal, Anda bisa menyesuaikan threshold di `js/angleDetector.js`. Lihat **[ANGLE_DETECTION_GUIDE.md](ANGLE_DETECTION_GUIDE.md)** untuk panduan lengkap.
+
+### Benefits
+✅ Tidak perlu retrain model  
+✅ Tidak mengubah arsitektur (tetap single-frame MLP)  
+✅ Real-time, tanpa latency tambahan  
+✅ Mudah di-tuning sesuai kebutuhan  
 
 ---
 
