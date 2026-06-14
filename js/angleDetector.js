@@ -22,6 +22,13 @@
 
 const AngleDetectorModule = (() => {
 
+  const CONFIG = {
+    // Threshold in degrees from vertical (0 = vertical)
+    PINKY_J_THRESHOLD: 50,
+    INDEX_Z_THRESHOLD: 50,
+    INDEX_L_GUARD_THRESHOLD: 45
+  };
+
   /* ══════════════════════════════════════════════════════════
    * HELPER FUNCTIONS
    * ══════════════════════════════════════════════════════════ */
@@ -109,13 +116,13 @@ const AngleDetectorModule = (() => {
     // console.log(`[AngleDetector] ${predictedClass} | Pinky: ${pinkyAngle.toFixed(1)}° | Index: ${indexAngle.toFixed(1)}°`);
 
     /* ── Aturan 1: I → J (kemiringan pinky) ──────────────── */
-    if (predictedClass === 'I' && pinkyAngle >= 50) {
+    if (predictedClass === 'I' && pinkyAngle >= CONFIG.PINKY_J_THRESHOLD) {
       console.log(`[AngleDetector] I → J (pinky angle: ${pinkyAngle.toFixed(1)}°)`);
       return 'J';
     }
 
     /* ── Aturan 2: D → Z (kemiringan index) ───────────────── */
-    if (predictedClass === 'D' && indexAngle >= 50) {
+    if (predictedClass === 'D' && indexAngle >= CONFIG.INDEX_Z_THRESHOLD) {
       console.log(`[AngleDetector] D → Z (index angle: ${indexAngle.toFixed(1)}°)`);
       return 'Z';
     }
@@ -124,8 +131,8 @@ const AngleDetectorModule = (() => {
     // Huruf Z memiliki index finger yang miring
     // Jika model bilang L tapi index miring, kemungkinan ini Z
     // Threshold dinaikkan dari 40° ke 45° untuk mengurangi false positive
-    if (predictedClass === 'L' && indexAngle >= 45) {
-      console.log(`[AngleDetector] L → Z (index angle: ${indexAngle.toFixed(1)}° ≥ 45°)`);
+    if (predictedClass === 'L' && indexAngle >= CONFIG.INDEX_L_GUARD_THRESHOLD) {
+      console.log(`[AngleDetector] L → Z (index angle: ${indexAngle.toFixed(1)}° ≥ ${CONFIG.INDEX_L_GUARD_THRESHOLD}°)`);
       return 'Z';
     }
 
