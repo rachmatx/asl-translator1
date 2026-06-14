@@ -68,7 +68,6 @@ const TrajectoryTracker = (() => {
     const pts   = _history;
     const n     = pts.length;
     const first = pts[0];
-    const mid   = pts[Math.floor(n / 2)];
     const last  = pts[n - 1];
 
     // Total displacement vector (start → end)
@@ -79,40 +78,55 @@ const TrajectoryTracker = (() => {
     // Ignore micro-movements (e.g. subtle hand tremor)
     if (totalDist < MIN_MOVE_DIST) return null;
 
-    // First half and second half displacement vectors
-    const fhDx = mid.x - first.x; // first-half horizontal
-    const fhDy = mid.y - first.y; // first-half vertical
-    const shDx = last.x - mid.x;  // second-half horizontal
-    const shDy = last.y - mid.y;  // second-half vertical
+    // Find bounding box and extrema
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minXIdx = 0, maxXIdx = 0;
+    let minYIdx = 0, maxYIdx = 0;
+
+    for (let i = 0; i < n; i++) {
+      const p = pts[i];
+      if (p.x < minX) { minX = p.x; minXIdx = i; }
+      if (p.x > maxX) { maxX = p.x; maxXIdx = i; }
+      if (p.y < minY) { minY = p.y; minYIdx = i; }
+      if (p.y > maxY) { maxY = p.y; maxYIdx = i; }
+    }
 
     /* ── Z detection ─────────────────────────────────────────
      * Signature: rightward → diagonal down-left → rightward
-     *   • First half:  moves right (fhDx > threshold)
-     *   • Second half: also moves right (shDx > threshold)
-     *   • Overall vertical displacement is modest (not J-like)
-     *   • The mid-point dips lower than both start and end
-     *     (the diagonal crossing stroke of the Z)
+     *   • Overall vertical displacement is modest.
+     *   • The leftmost point (minX) should occur somewhere in the middle,
+     *     representing the bottom of the diagonal stroke before the final
+     *     rightward stroke.
+     *   • Starts on the left, goes right, comes back left, goes right.
      */
-    const midDipY = mid.y - Math.min(first.y, last.y); // positive = dip
+    const midDipY = maxY - Math.min(first.y, last.y); // positive = dip (maxY is lowest on screen)
+
+    // We expect the minX (leftmost point of the diagonal stroke) to happen
+    // after the start and before the end.
     const isZ = (
-      fhDx  >  0.06 &&    // first half goes right
-      shDx  >  0.04 &&    // second half also goes right
-      Math.abs(totalDy) < 0.18 && // not predominantly vertical
-      midDipY > 0.02      // there is a noticeable downward dip in the middle
+      totalDx > 0.05 &&             // Ends up to the right of where it started
+      Math.abs(totalDy) < 0.20 &&     // Not predominantly vertical
+      minXIdx > 2 && minXIdx < n - 2 && // The leftmost point is in the middle
+      (pts[minXIdx].x - first.x) < 0.05 && // The leftmost point is roughly at the same x as start (or to left of it)
+      midDipY > 0.05              // Noticeable downward dip
     );
     if (isZ) return 'Z';
 
     /* ── J detection ─────────────────────────────────────────
      * Signature: downward movement with an inward hook at bottom
-     *   • First half: clearly downward (fhDy > threshold)
-     *   • Second half: curves sideways — the hook (|shDx| > threshold)
-     *   • Overall movement is mostly vertical
+     *   • Overall movement is mostly vertical downward (y increases)
+     *   • The lowest point (maxY) should happen before the end,
+     *     because the hook usually comes back up slightly or moves horizontally.
+     *   • There must be a hook (x displacement at the bottom)
      */
+
+    // Hook displacement: X distance from the start to the end.
     const isJ = (
-      fhDy              >  0.08 &&   // first half goes down
-      totalDy           >  0.10 &&   // overall downward arc
-      Math.abs(shDx)    >  0.05 &&   // hook at the bottom
-      Math.abs(totalDx) <  0.18      // not predominantly horizontal
+      totalDy > 0.15 &&             // Overall downward arc
+      Math.abs(totalDx) < 0.20 &&     // Not predominantly horizontal
+      maxYIdx > n / 2 &&            // The lowest point is in the second half
+      Math.abs(last.x - pts[maxYIdx].x) > 0.04 // Definite sideways movement (hook) at or after the bottom
     );
     if (isJ) return 'J';
 
@@ -153,10 +167,16 @@ const btnSpeak      = document.getElementById('btn-speak');
 /* ══════════════════════════════════════════════════════════════
  * CONFIG
  * ══════════════════════════════════════════════════════════════ */
-const MAX_FPS       = 15;
-const FRAME_INTERVAL = 1000 / MAX_FPS;
-const CONF_THRESHOLD = 0.75; // minimum confidence for a vote to count
-const VOTER = new VotingBuffer(10, 7); // 10-frame window, need ≥7 to win
+const CONFIG = {
+  MAX_FPS: 15,
+  CONF_THRESHOLD: 0.75, // minimum confidence for a vote to count
+  DEBOUNCE_TIME_MS: 2000, // hold time required to type a letter
+  VOTING_WINDOW: 10,
+  VOTING_THRESHOLD: 7
+};
+
+const FRAME_INTERVAL = 1000 / CONFIG.MAX_FPS;
+const VOTER = new VotingBuffer(CONFIG.VOTING_WINDOW, CONFIG.VOTING_THRESHOLD); // 10-frame window, need ≥7 to win
 
 
 /* ══════════════════════════════════════════════════════════════
@@ -370,7 +390,7 @@ async function loop(now) {
         stableChar      = top.className;
         stableStartTime = Date.now();
         isCharConfirmed = false;
-      } else if ((Date.now() - stableStartTime) >= 2000 && !isCharConfirmed) {
+      } else if ((Date.now() - stableStartTime) >= CONFIG.DEBOUNCE_TIME_MS && !isCharConfirmed) {
         // Held for 2 seconds — confirm and append
         appendLetter(stableChar);
         isCharConfirmed = true;
@@ -383,7 +403,7 @@ async function loop(now) {
     }
 
     /* ── Step 9: Push into voting buffer ────────────────── */
-    if (top.probability >= CONF_THRESHOLD) {
+    if (top.probability >= CONFIG.CONF_THRESHOLD) {
       VOTER.push(top.className);
     } else {
       VOTER.push('_low'); // non-letter sentinel keeps buffer alive

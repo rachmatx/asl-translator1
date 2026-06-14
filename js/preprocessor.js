@@ -177,25 +177,15 @@ const PreprocessorModule = (() => {
    * _isPalmFacing
    * ─────────────────────────────────────────────────────────
    * Determines whether the camera is seeing the PALM or the
-   * BACK of the hand, using the 2-D cross product of two
+   * BACK of the hand, using the 3D cross product of two
    * vectors that lie in the palm plane.
    *
    * How it works:
    *  • Vector A: wrist (lm 0) → index finger MCP (lm 5)
    *  • Vector B: wrist (lm 0) → pinky MCP (lm 17)
-   *  • Cross product Z-component = Ax*By − Ay*Bx
-   *    The sign tells us which face of the hand points toward
-   *    the camera in the (mirrored) selfie-mode image.
-   *
-   * Sign convention in selfie mode (X axis mirrored):
-   *  • Right hand, palm facing → crossZ < 0
-   *  • Left  hand, palm facing → crossZ > 0
-   *
-   * Why it matters:
-   *  The MLP was trained exclusively on palm-facing samples.
-   *  When the back of the hand is shown, landmark Z-values
-   *  invert and the model confuses the gesture. This flag
-   *  lets app.js warn the user to flip their hand.
+   *  • We calculate the 3D normal vector (A x B)
+   *  • Since we are using MediaPipe 3D coordinates, the Z-component
+   *    of this normal vector directly indicates the palm's facing direction.
    *
    * @param {Array<{x,y,z}>} landmarks
    * @param {boolean}        isLeftHand - physical left hand flag
@@ -206,13 +196,17 @@ const PreprocessorModule = (() => {
     const im = landmarks[5];  // index finger MCP
     const pm = landmarks[17]; // pinky MCP
 
-    // 2-D cross product in screen / normalised-coord space
+    // Vector A: wrist to index MCP
     const ax = im.x - w.x;
     const ay = im.y - w.y;
+
+    // Vector B: wrist to pinky MCP
     const bx = pm.x - w.x;
     const by = pm.y - w.y;
 
-    const crossZ = ax * by - ay * bx;
+    // 3D Cross Product normal vector (A x B)
+    // Only the Z component is strictly needed for facing direction relative to camera
+    const crossZ = (ax * by) - (ay * bx);
 
     // Sign is inverted for left vs right hand in selfie mode
     return isLeftHand ? (crossZ > 0) : (crossZ < 0);
